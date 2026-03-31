@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ER — Delete Entry</title>
+  <style>
+    body { background:#111; color:#fff; font-family:monospace; padding:2rem;
+           display:flex; flex-direction:column; align-items:center; justify-content:center;
+           min-height:100vh; margin:0; }
+    pre  { background:#222; padding:1rem; border-radius:6px; font-size:0.85rem; }
+    .ok  { color:#4c4; } .err { color:#c44; }
+  </style>
+</head>
+<body>
+<pre id="log">Running...</pre>
+<script>
+const params  = new URLSearchParams(location.search);
+const sciName = params.get('sci') || 'Alcelaphus buselaphus';
+const log     = document.getElementById('log');
+
+try {
+  const raw = localStorage.getItem('er_scanner_db') || '[]';
+  const db  = JSON.parse(raw);
+  const before = db.length;
+  const after  = db.filter(s =>
+    (s.scientific_name || '').toLowerCase() !== sciName.toLowerCase()
+  );
+  localStorage.setItem('er_scanner_db', JSON.stringify(after));
+  const removed = before - after.length;
+  log.className = removed > 0 ? 'ok' : 'err';
+  log.textContent = removed > 0
+    ? `✓ Deleted "${sciName}" from localStorage.\n  (${before} → ${after.length} entries)\n\nRedirecting to scanner...`
+    : `⚠ No entry found for "${sciName}".\n  (${before} entries unchanged)\n\nRedirecting to scanner...`;
+} catch(e) {
+  log.className = 'err';
+  log.textContent = 'Error: ' + e.message;
+}
+
+setTimeout(() => { location.href = 'index.html'; }, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,2037 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ER Scanner — Extinction Registry (Museum Kiosk)</title>
+  <meta name="description" content="ER Scanner — identify museum specimens and reveal their conservation status." />
+  <meta name="author" content="Jhave Johnston / CDN UiB / Glia.ca" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="color-scheme" content="dark" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Screen system ─────────────────────────────────────────────────────── */
+    .screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+      overflow: hidden;
+    }
+    .screen.active { opacity: 1; pointer-events: auto; }
+
+    /* ── Splash ────────────────────────────────────────────────────────────── */
+    #screen-splash {
+      align-items: center; justify-content: center;
+      padding: 2rem; text-align: center;
+      background: var(--charcoal);
+    }
+    .splash-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background: url('../dist/extinction_rate_graph.png') center/cover no-repeat;
+      opacity: 0.3; mix-blend-mode: luminosity; pointer-events: none;
+    }
+    .splash-lang {
+      position: absolute; top: 2rem; right: 2rem; z-index: 20;
+      display: flex; align-items: center; gap: 0.25rem;
+    }
+    .splash-lang button {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 0 4px; transition: color 0.2s;
+    }
+    .splash-lang button.active  { color: var(--red); }
+    .splash-lang button.inactive { color: rgba(255,255,255,0.4); }
+    .splash-lang .sep { color: rgba(255,255,255,0.2); font-size: 10px; }
+
+    .splash-inner {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column; align-items: center;
+      width: 100%; max-width: 280px;
+    }
+    .splash-logo {
+      font-size: clamp(80px, 30vw, 140px); font-weight: 100;
+      color: var(--white); line-height: 1;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      margin-bottom: 1rem;
+    }
+    .splash-subtitle {
+      font-size: 1.1rem; color: var(--red); font-weight: 200;
+      letter-spacing: 0.4em; text-transform: uppercase;
+      white-space: pre-line; line-height: 1.6; margin-left: 0.4em;
+      margin-bottom: 2rem;
+    }
+    .splash-instruction {
+      font-size: 11px; color: rgba(255,255,255,0.6); font-weight: 300;
+      max-width: 200px; line-height: 1.6; margin-bottom: 2rem;
+    }
+    .splash-buttons {
+      width: 100%; display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;
+    }
+    .btn-scan {
+      width: 100%; padding: 1rem;
+      border: 1px solid var(--red); background: var(--red);
+      color: #fff; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      animation: scanPulse 2s ease-in-out infinite;
+      transition: transform 0.1s;
+    }
+    .btn-scan:active { transform: scale(0.97); }
+    @keyframes scanPulse {
+      0%, 100% { opacity: 0.85; } 50% { opacity: 1; }
+    }
+    .btn-archive {
+      width: 100%; padding: 1rem;
+      border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4);
+      color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      backdrop-filter: blur(4px); transition: background 0.2s, transform 0.1s;
+    }
+    .btn-archive:hover { background: rgba(255,255,255,0.05); }
+    .btn-archive:active { transform: scale(0.97); }
+    .splash-links {
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    }
+    .btn-info {
+      font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase;
+      letter-spacing: 0.2em; font-weight: 500; text-decoration: underline;
+      text-underline-offset: 4px; transition: color 0.2s;
+    }
+    .btn-info:hover { color: var(--white); }
+    .splash-credit {
+      font-size: 9px; color: rgba(255,255,255,0.3);
+      text-transform: uppercase; letter-spacing: 0.2em;
+    }
+
+    /* ── Scanner ───────────────────────────────────────────────────────────── */
+    #screen-scanner { background: #000; }
+    #scanner-video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    #scanner-video.mirrored { transform: scaleX(-1); }
+
+    .scanner-ui {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column; height: 100%;
+    }
+    .scanner-topbar {
+      background: rgba(0,0,0,0.8); padding: 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .scanner-logo { color: var(--red); font-weight: 700; font-size: 1.25rem; letter-spacing: -0.05em; }
+    .scanner-lang-display {
+      color: rgba(255,255,255,0.8); font-size: 11px;
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.2em;
+    }
+    .btn-scanner-search { color: var(--white); line-height: 0; padding: 4px; }
+
+    .scanner-center {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .reticle {
+      width: 256px; height: 256px;
+      border: 2px solid rgba(255,255,255,0.3); border-radius: 8px;
+      position: relative;
+    }
+    .reticle-corner {
+      position: absolute; width: 32px; height: 32px;
+    }
+    .reticle-tl {
+      top: -2px; left: -2px;
+      border-top: 4px solid rgba(255,255,255,0.7);
+      border-left: 4px solid rgba(255,255,255,0.7);
+      border-radius: 6px 0 0 0;
+    }
+    .reticle-tr {
+      top: -2px; right: -2px;
+      border-top: 4px solid rgba(255,255,255,0.7);
+      border-right: 4px solid rgba(255,255,255,0.7);
+      border-radius: 0 6px 0 0;
+    }
+    .reticle-bl {
+      bottom: -2px; left: -2px;
+      border-bottom: 4px solid rgba(255,255,255,0.7);
+      border-left: 4px solid rgba(255,255,255,0.7);
+      border-radius: 0 0 0 6px;
+    }
+    .reticle-br {
+      bottom: -2px; right: -2px;
+      border-bottom: 4px solid rgba(255,255,255,0.7);
+      border-right: 4px solid rgba(255,255,255,0.7);
+      border-radius: 0 0 6px 0;
+    }
+    .reticle-pulse {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.05);
+      animation: reticlePulse 2s ease-in-out infinite;
+    }
+    @keyframes reticlePulse {
+      0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; }
+    }
+
+    .scanner-bottom {
+      background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+      padding: 2rem; display: flex; flex-direction: column; align-items: center;
+    }
+    .btn-capture {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 4px solid #fff; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1rem; transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn-capture:active { transform: scale(0.95); }
+    .btn-capture:disabled { opacity: 0.4; pointer-events: none; }
+    .btn-capture-inner { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+    .scanner-hint {
+      color: rgba(255,255,255,0.8); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 1.5rem;
+    }
+    .btn-type-name {
+      color: rgba(255,255,255,0.6); font-size: 11px;
+      text-decoration: underline; text-underline-offset: 4px;
+    }
+
+    /* Scanner loading overlay */
+    #scanner-loading {
+      position: absolute; inset: 0; z-index: 20;
+      background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    #scanner-loading.visible { opacity: 1; pointer-events: auto; }
+    .loading-text {
+      color: #fff; font-size: 1.1rem; font-weight: 300;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      animation: loadScale 1.5s ease-in-out infinite;
+    }
+    @keyframes loadScale {
+      0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); }
+    }
+
+    /* Scanner error */
+    #scanner-error {
+      position: absolute; top: 6rem; left: 1rem; right: 1rem; z-index: 30;
+      background: var(--red); padding: 1rem; border-radius: 4px;
+      color: #fff; text-align: center;
+      box-shadow: 0 0 30px rgba(255,0,0,0.3);
+      transform: translateY(-20px); opacity: 0; pointer-events: none;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    #scanner-error.visible { transform: translateY(0); opacity: 1; pointer-events: auto; }
+    .error-msg { font-size: 13px; font-weight: 500; margin-bottom: 0.75rem; }
+    .error-actions { display: flex; gap: 1rem; justify-content: center; }
+    .error-actions button {
+      font-size: 9px; text-transform: uppercase; font-weight: 700;
+      border-bottom: 1px solid #fff; padding-bottom: 1px;
+    }
+
+    /* ── Result Screen ─────────────────────────────────────────────────────── */
+    #screen-result {
+      background: var(--charcoal);
+      overflow-y: auto;
+      padding-top: 3.5rem;
+    }
+    .result-inner { max-width: 600px; margin: 0 auto; width: 100%; }
+
+    .result-stripe { height: 4px; width: 100%; }
+    .result-image-wrap {
+      width: 100%; max-height: 280px; overflow: hidden;
+    }
+    .result-image-wrap img {
+      width: 100%; height: 280px; object-fit: cover;
+      filter: grayscale(0.2);
+    }
+    .result-body { padding: 1.5rem 1.5rem 6rem; color: var(--white); }
+    .result-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 1.5rem;
+    }
+    .result-names { flex: 1; padding-right: 0.75rem; }
+    .result-common {
+      font-size: 1.5rem; font-weight: 400; color: var(--white);
+      line-height: 1.2; margin-bottom: 4px;
+    }
+    .result-secondary { font-size: 13px; color: rgba(255,255,255,0.45); margin-bottom: 4px; }
+    .result-scientific { font-size: 13px; color: rgba(255,255,255,0.45); font-style: italic; font-family: var(--font-mono); }
+    .result-taxonomy {
+      font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase;
+      letter-spacing: 0.2em; margin-top: 0.5rem;
+    }
+    .result-badge {
+      padding: 4px 8px; border-radius: 3px;
+      font-size: 9px; font-weight: 700; color: #fff;
+      white-space: nowrap; flex-shrink: 0; align-self: flex-start;
+    }
+
+    .timeline-item { margin-bottom: 1.5rem; }
+    .timeline-label {
+      font-size: 9px; color: rgba(255,255,255,0.35); text-transform: uppercase;
+      letter-spacing: 0.2em; font-weight: 700; margin-bottom: 2px;
+    }
+    .timeline-value { font-size: 13px; font-family: var(--font-mono); color: var(--white); }
+    .timeline-cause { font-size: 11px; color: var(--red); margin-top: 4px; }
+
+    .result-synopsis {
+      font-size: 11px; font-family: var(--font-mono); color: rgba(255,255,255,0.8);
+      line-height: 1.7; padding: 4px 0 1rem;
+      border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.25rem; margin-top: 0.5rem;
+    }
+    .result-synopsis strong { font-weight: 700; color: var(--white); }
+    .result-narrative {
+      font-size: 13px; line-height: 1.7; color: rgba(255,255,255,0.75);
+      font-weight: 300; margin-bottom: 1rem;
+    }
+
+    .result-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+    .btn-result-wiki {
+      flex: 1; padding: 0.875rem;
+      border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--white); display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-result-wiki:hover  { background: rgba(255,255,255,0.05); }
+    .btn-result-wiki:active { background: rgba(255,255,255,0.1); }
+
+    /* ── Manual Search ─────────────────────────────────────────────────────── */
+    #screen-search { background: var(--charcoal); padding-top: 3.5rem; }
+    .search-header {
+      padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);
+      display: flex; flex-direction: column; gap: 1.25rem;
+    }
+    .search-title-row { display: flex; align-items: center; gap: 1rem; }
+    .btn-search-back { color: rgba(255,255,255,0.7); line-height: 0; transition: color 0.2s; }
+    .btn-search-back:hover { color: var(--white); }
+    .search-title {
+      font-size: 1rem; font-weight: 300; letter-spacing: 0.15em;
+      text-transform: uppercase; color: rgba(255,255,255,0.9);
+    }
+    .search-input-wrap { position: relative; width: 100%; }
+    .search-input-icon {
+      position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);
+      color: rgba(255,255,255,0.5); pointer-events: none; line-height: 0;
+    }
+    #search-input {
+      width: 100%; background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.2); border-radius: 999px;
+      padding: 0.875rem 1rem 0.875rem 3rem;
+      font-size: 13px; color: var(--white); outline: none; font-family: inherit;
+    }
+    #search-input::placeholder { color: rgba(255,255,255,0.4); }
+    #search-input:focus {
+      border-color: var(--red);
+      box-shadow: 0 0 0 2px rgba(204,34,34,0.25);
+    }
+    .search-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .filter-btn {
+      padding: 6px 12px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.7); transition: background 0.15s;
+    }
+    .filter-btn:hover  { background: rgba(255,255,255,0.1); }
+    .filter-btn:active { background: rgba(255,255,255,0.2); }
+
+    .search-results { flex: 1; overflow-y: auto; }
+    .search-section-label {
+      padding: 0.5rem 1.25rem; font-size: 9px; text-transform: uppercase;
+      letter-spacing: 0.15em; color: rgba(204,34,34,0.9);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .search-result-item {
+      width: 100%; padding: 1.25rem;
+      display: flex; align-items: center; gap: 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      text-align: left; transition: background 0.1s;
+    }
+    .search-result-item:hover  { background: rgba(255,255,255,0.05); }
+    .search-result-item:active { background: rgba(255,255,255,0.1); }
+    .search-thumb {
+      width: 56px; height: 56px; border-radius: 6px;
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden; flex-shrink: 0;
+    }
+    .search-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+      filter: grayscale(1); opacity: 0.8;
+    }
+    .search-thumb-empty {
+      width: 100%; height: 100%; display: flex;
+      align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.3);
+    }
+    .search-result-text { flex: 1; min-width: 0; }
+    .search-result-name {
+      font-size: 13px; font-weight: 500; color: var(--white);
+      display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .search-result-sci {
+      font-size: 11px; color: rgba(255,255,255,0.55); font-style: italic;
+      font-family: var(--font-mono);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-result-status {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.5); margin-top: 2px;
+    }
+    .search-empty, .search-loading {
+      padding: 2rem; text-align: center;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.4);
+    }
+    .search-loading { animation: searchFade 1s ease-in-out infinite; }
+    @keyframes searchFade { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+
+    /* ── About ─────────────────────────────────────────────────────────────── */
+    #screen-about { background: #161616; overflow-y: auto; }
+    .about-scroll {
+      flex: 1; overflow-y: auto; padding: 2rem 1.5rem 1rem;
+      max-width: 600px; margin: 0 auto; width: 100%;
+    }
+    .about-title {
+      font-size: 1.4rem; color: var(--red); font-weight: 300;
+      letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 1.5rem;
+    }
+    .about-notice {
+      padding: 1.25rem; background: rgba(204,34,34,0.1);
+      border-left: 2px solid var(--red); border-radius: 2px; margin-bottom: 2rem;
+    }
+    .about-notice p { font-size: 15px; font-weight: 500; line-height: 1.6; margin-bottom: 0.5rem; }
+    .about-notice small {
+      font-size: 10px; color: rgba(255,255,255,0.6); font-style: italic;
+      letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.6;
+      display: block;
+    }
+    .about-text { font-size: 15px; line-height: 1.7; color: rgba(255,255,255,0.9); margin-bottom: 2rem; }
+    .about-text a { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }
+    .about-refs-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.2em; color: var(--red); margin-bottom: 1rem;
+    }
+    .about-refs { list-style: none; display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+    .about-refs li a {
+      color: var(--red); font-size: 14px; font-style: italic;
+      font-family: var(--font-serif); display: block; line-height: 1.5;
+      transition: color 0.15s;
+    }
+    .about-refs li a:hover { color: var(--white); text-decoration: underline; }
+    .about-credits {
+      padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem;
+    }
+    .about-credits-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.4); font-weight: 700; margin-bottom: 0.75rem;
+    }
+    .about-credits-text { font-size: 13px; color: rgba(255,255,255,0.9); font-weight: 300; line-height: 1.6; }
+    .about-credits-text a { text-decoration: underline; text-underline-offset: 4px; }
+    .about-vibe {
+      font-size: 9px; color: rgba(255,255,255,0.4); font-style: italic;
+      text-transform: uppercase; letter-spacing: 0.2em; margin-top: 0.75rem;
+    }
+    .about-footer {
+      padding: 0 1.5rem 1.5rem; max-width: 600px; margin: 0 auto; width: 100%;
+    }
+    .btn-about-back {
+      width: 100%; padding: 1rem;
+      border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px); border-radius: 999px;
+      color: var(--white); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.2em;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-about-back:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── Top Nav ───────────────────────────────────────────────────────────── */
+    #top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1.25rem; height: 3.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      transform: translateY(-100%); transition: transform 0.3s;
+    }
+    #top-nav.visible { transform: translateY(0); }
+    .nav-logo {
+      color: var(--red); font-weight: 700; font-size: 1.1rem;
+      letter-spacing: -0.05em; cursor: pointer;
+    }
+    .nav-icons { display: flex; gap: 2px; align-items: center; }
+    .nav-icon {
+      line-height: 0; padding: 5px; border-radius: 6px; cursor: pointer;
+      color: rgba(255,255,255,0.3); transition: color 0.2s, background 0.15s;
+    }
+    .nav-icon:hover  { color: rgba(255,255,255,0.75); }
+    .nav-icon.active { color: var(--red); }
+    .nav-lang { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
+    .nav-lang .l  { transition: color 0.2s; }
+    .nav-lang .l.active   { color: var(--red); }
+    .nav-lang .l.inactive { color: rgba(255,255,255,0.4); }
+    .nav-sep { color: rgba(255,255,255,0.2); margin: 0 2px; }
+
+    /* ── Archive Screen ──────────────────────────────────────────────────────── */
+    #screen-archive {
+      background: var(--charcoal);
+      overflow-y: auto;
+      padding-top: 3.5rem;
+    }
+    #archive-list { padding-bottom: 6rem; }
+    .archive-item {
+      display: flex; align-items: center; cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 0.7rem 1.25rem 0.7rem 0;
+      transition: background 0.1s; gap: 0.75rem;
+    }
+    .archive-item:hover  { background: rgba(255,255,255,0.03); }
+    .archive-item:active { background: rgba(255,255,255,0.07); }
+    .archive-item-bar {
+      width: 3px; align-self: stretch; flex-shrink: 0;
+      min-height: 2rem; border-radius: 0 1px 1px 0;
+    }
+    .archive-item-body { flex: 1; min-width: 0; }
+    .archive-item-name {
+      font-size: 13px; font-weight: 400; color: var(--white);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+    }
+    .archive-item-sci {
+      font-size: 10px; font-style: italic; font-family: var(--font-mono);
+      color: rgba(255,255,255,0.35); display: block; margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .archive-item-synopsis {
+      display: none; font-size: 10px; font-family: var(--font-mono);
+      color: rgba(255,255,255,0.7); line-height: 1.65;
+      margin-top: 0.5rem; padding-top: 0.5rem;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      white-space: normal;
+    }
+    .archive-item-badge {
+      font-size: 8px; font-weight: 700; letter-spacing: 0.08em;
+      padding: 3px 6px; border-radius: 2px; color: #fff;
+      flex-shrink: 0; align-self: flex-start; margin-top: 2px;
+    }
+    .archive-highlight {
+      background: rgba(204,34,34,0.07);
+    }
+    .archive-highlight .archive-item-bar { background: var(--red) !important; }
+    .archive-highlight .archive-item-name { font-weight: 500; }
+    .archive-highlight .archive-item-synopsis { display: block; }
+    .archive-new-tag {
+      display: inline-block; font-size: 7px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase; color: var(--red);
+      border: 1px solid var(--red); padding: 1px 3px; border-radius: 2px;
+      margin-left: 0.35rem; vertical-align: middle; line-height: 1.4;
+    }
+    .archive-empty {
+      padding: 3rem; text-align: center;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* ── Canvas hidden ──────────────────────────────────────────────────────── */
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Nav ──────────────────────────────────────────────────────────── -->
+<nav id="top-nav">
+  <span class="nav-logo" onclick="go('splash')">ER</span>
+  <div class="nav-icons">
+    <!-- Camera: new scan -->
+    <button class="nav-icon" id="nav-icon-camera" onclick="go('scanner')" aria-label="New scan">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </button>
+    <!-- Archive list -->
+    <button class="nav-icon" id="nav-icon-archive" onclick="window.location.href='archive.html'" aria-label="Archive">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6"  x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6"  x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/>
+        <line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </button>
+    <!-- Search -->
+    <button class="nav-icon" id="nav-icon-search" onclick="go('search')" aria-label="Search">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
+  </div>
+  <div class="nav-lang" onclick="toggleLang()">
+    <span class="l" id="nav-en">EN</span>
+    <span class="nav-sep">|</span>
+    <span class="l" id="nav-nn">NN</span>
+  </div>
+</nav>
+
+<!-- ── Splash ────────────────────────────────────────────────────────────── -->
+<div class="screen active" id="screen-splash">
+  <div class="splash-bg"></div>
+
+  <div class="splash-lang">
+    <button id="splash-btn-en" class="active"   onclick="setLang('en')">EN</button>
+    <span class="sep">|</span>
+    <button id="splash-btn-nn" class="inactive" onclick="setLang('nn')">NN</button>
+  </div>
+
+  <div class="splash-inner">
+    <div>
+      <div class="splash-logo">ER</div>
+      <p class="splash-subtitle" id="splash-subtitle"></p>
+    </div>
+    <p class="splash-instruction" id="splash-instruction"></p>
+    <div class="splash-buttons">
+      <button class="btn-scan" id="btn-open-scanner" onclick="go('scanner')">Open Scanner</button>
+      <button class="btn-archive" onclick="window.location.href='archive.html'">Explore Archive</button>
+    </div>
+    <div class="splash-links">
+      <button class="btn-info" id="btn-info" onclick="go('about')">Info</button>
+      <p class="splash-credit">UIB Universitetsmuseet i Bergen</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scanner ───────────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-scanner">
+  <video id="scanner-video" autoplay playsinline></video>
+
+  <div class="scanner-ui">
+    <!-- Top bar -->
+    <div class="scanner-topbar">
+      <span class="scanner-logo">ER</span>
+      <span class="scanner-lang-display" id="scanner-lang-display">EN</span>
+      <button class="btn-scanner-search" onclick="go('search')" aria-label="Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Reticle -->
+    <div class="scanner-center">
+      <div class="reticle">
+        <div class="reticle-corner reticle-tl"></div>
+        <div class="reticle-corner reticle-tr"></div>
+        <div class="reticle-corner reticle-bl"></div>
+        <div class="reticle-corner reticle-br"></div>
+        <div class="reticle-pulse"></div>
+      </div>
+    </div>
+
+    <!-- Bottom controls -->
+    <div class="scanner-bottom">
+      <button class="btn-capture" id="btn-capture" onclick="captureAndIdentify()" aria-label="Identify specimen">
+        <div class="btn-capture-inner"></div>
+      </button>
+      <p class="scanner-hint" id="scanner-hint"></p>
+      <button class="btn-type-name" onclick="go('search')" id="btn-type-name"></button>
+    </div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="scanner-loading">
+    <div class="loading-text" id="loading-text"></div>
+  </div>
+
+  <!-- Error toast -->
+  <div id="scanner-error">
+    <p class="error-msg" id="error-msg"></p>
+    <div class="error-actions">
+      <button onclick="dismissError()" id="btn-try-again"></button>
+      <button onclick="go('search')" id="btn-search-manually"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Manual Search ─────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-search">
+  <div class="search-header">
+    <div class="search-title-row">
+      <button class="btn-search-back" onclick="go('scanner')" aria-label="Back">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <h2 class="search-title">Search the Extinction Archive</h2>
+    </div>
+    <div class="search-input-wrap">
+      <span class="search-input-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </span>
+      <input type="text" id="search-input" autocomplete="off" autocorrect="off" spellcheck="false" />
+    </div>
+    <div class="search-filters">
+      <button class="filter-btn">Extinct</button>
+      <button class="filter-btn">Endangered</button>
+      <button class="filter-btn">Least Concern</button>
+      <button class="filter-btn">Megafaunal Extinction</button>
+    </div>
+  </div>
+  <div class="search-results" id="search-results"></div>
+</div>
+
+<!-- ── About ─────────────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-about">
+  <div class="about-scroll">
+
+    <!-- English content -->
+    <div id="about-en">
+      <h2 class="about-title">Information</h2>
+      <div class="about-notice">
+        <p>This interactive experience is designed specifically for the UiB University Kunnskapsfest on April 12th, 2026.</p>
+        <small>Certain museum-specific search and scanner aggregation functionalities will exclusively be active on that particular day.</small>
+      </div>
+      <p class="about-text">
+        ER Scanner identifies museum specimens and reveals their conservation status (a portable extinction archive).
+        Our core intent is to expand awareness of the accelerating biodiversity crisis and the
+        <a href="https://www.iucnredlist.org/" target="_blank" rel="noopener">IUCN Red List</a>.
+      </p>
+      <h3 class="about-refs-title">Bibliography &amp; References</h3>
+      <ul class="about-refs">
+        <li><a href="https://en.wikipedia.org/wiki/The_Sixth_Extinction:_An_Unnatural_History" target="_blank" rel="noopener">Kolbert, E. (2014). The Sixth Extinction: An Unnatural History.</a></li>
+        <li><a href="https://www.science.org/doi/10.1126/sciadv.1400253" target="_blank" rel="noopener">Ceballos et al. (2015). "Accelerated modern human-induced species losses". Science Advances.</a></li>
+        <li><a href="https://www.science.org/doi/10.1126/science.1101476" target="_blank" rel="noopener">Barnosky et al. (2004). "Assessing the Causes of Late Pleistocene Extinctions on the Continents". Science.</a></li>
+        <li><a href="https://www.ipcc.ch/report/ar6/syr/" target="_blank" rel="noopener">IPCC (2023). Climate Change Synthesis Report.</a></li>
+        <li><a href="https://acp.copernicus.org/articles/7/2003/2007/" target="_blank" rel="noopener">Robock, A. et al. (2007). "Climatic consequences of regional nuclear conflicts". Atmospheric Chemistry and Physics.</a></li>
+      </ul>
+      <div class="about-credits">
+        <p class="about-credits-label">Credits</p>
+        <p class="about-credits-text">
+          Jhave @ <a href="https://glia.ca" target="_blank" rel="noopener">Glia.ca</a> of the
+          <a href="https://cdn.uib.no" target="_blank" rel="noopener">Center for Digital Narrative</a>
+        </p>
+        <p class="about-vibe">Vibe-coded with Antigravity (March 2026)</p>
+      </div>
+    </div>
+
+    <!-- Nynorsk content -->
+    <div id="about-nn" style="display:none">
+      <h2 class="about-title">Informasjon</h2>
+      <div class="about-notice">
+        <p>Denne interaktive opplevinga er designa spesifikt for Kunnskapsfesten ved UiB den 12. april 2026.</p>
+        <small>Enkelte museums-spesifikke søkefunksjonar og dataaggregering er berre aktive på akkurat den dagen.</small>
+      </div>
+      <p class="about-text">
+        ER Scanner identifiserer museumseksemplar og viser bevaringsstatusen deira (eit berbart utryddingsarkiv).
+        Vårt hovudmål er å auka medvitet om den akselererande biodiversitetskrisa og
+        <a href="https://www.iucnredlist.org/" target="_blank" rel="noopener">rødlista til IUCN</a>.
+      </p>
+      <h3 class="about-refs-title">Bibliografi &amp; Referansar</h3>
+      <ul class="about-refs">
+        <li><a href="https://en.wikipedia.org/wiki/The_Sixth_Extinction:_An_Unnatural_History" target="_blank" rel="noopener">Kolbert, E. (2014). The Sixth Extinction: An Unnatural History.</a></li>
+        <li><a href="https://www.science.org/doi/10.1126/sciadv.1400253" target="_blank" rel="noopener">Ceballos et al. (2015). "Accelerated modern human-induced species losses". Science Advances.</a></li>
+        <li><a href="https://www.science.org/doi/10.1126/science.1101476" target="_blank" rel="noopener">Barnosky et al. (2004). "Assessing the Causes of Late Pleistocene Extinctions on the Continents". Science.</a></li>
+        <li><a href="https://www.ipcc.ch/report/ar6/syr/" target="_blank" rel="noopener">IPCC (2023). Climate Change Synthesis Report.</a></li>
+        <li><a href="https://acp.copernicus.org/articles/7/2003/2007/" target="_blank" rel="noopener">Robock, A. et al. (2007). "Climatic consequences of regional nuclear conflicts". Atmospheric Chemistry and Physics.</a></li>
+      </ul>
+      <div class="about-credits">
+        <p class="about-credits-label">Kredittering</p>
+        <p class="about-credits-text">
+          Jhave @ <a href="https://glia.ca" target="_blank" rel="noopener">Glia.ca</a> of the
+          <a href="https://cdn.uib.no" target="_blank" rel="noopener">Center for Digital Narrative</a>
+        </p>
+        <p class="about-vibe">Vibe-coded with Antigravity (March 2026)</p>
+      </div>
+    </div>
+
+  </div><!-- /about-scroll -->
+  <div class="about-footer">
+    <button class="btn-about-back" id="btn-about-back" onclick="go('splash')"></button>
+  </div>
+</div>
+
+<!-- ── Result Screen ──────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-result">
+  <div class="result-inner">
+    <div class="result-stripe" id="result-stripe"></div>
+    <div class="result-image-wrap" id="result-image-wrap" style="display:none">
+      <img id="result-image" src="" alt="" />
+    </div>
+    <div class="result-body">
+      <div class="result-header">
+        <div class="result-names">
+          <h2 class="result-common"     id="result-common"></h2>
+          <p  class="result-secondary"  id="result-secondary"></p>
+          <p  class="result-scientific" id="result-scientific"></p>
+          <p  class="result-taxonomy"   id="result-taxonomy"></p>
+        </div>
+        <div class="result-badge" id="result-badge"></div>
+      </div>
+
+      <div id="result-timeline"></div>
+      <div class="result-synopsis"  id="result-synopsis"  style="display:none"></div>
+      <p   class="result-narrative" id="result-narrative" style="display:none"></p>
+
+      <div class="result-actions">
+        <button class="btn-result-wiki" onclick="openWiki()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/>
+            <line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+          <span id="btn-wiki-label"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Archive Screen ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-archive">
+  <div id="archive-list"></div>
+</div>
+
+<!-- ── Hidden capture canvas ────────────────────────────────────────────── -->
+<canvas id="capture-canvas"></canvas>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── Config ────────────────────────────────────────────────────────────────
+// API key is loaded from .env via api.php?action=config at boot.
+// Never hardcode the key here — .env is gitignored.
+let GEMINI_API_KEY = '';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+let   GEMINI_URL   = '';
+
+async function loadConfig() {
+  function applyKey(key) {
+    GEMINI_API_KEY = key;
+    GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    console.log('Gemini API key loaded');
+  }
+
+  // 1. PHP backend (production / shared hosting)
+  try {
+    const resp = await fetch('api.php?action=config');
+    if (resp.ok) {
+      const cfg = await resp.json();
+      if (cfg.gemini_api_key) { applyKey(cfg.gemini_api_key); return; }
+    }
+  } catch (_) {}
+
+  // 2. config.local.json (works with any static file server)
+  try {
+    const resp = await fetch('config.local.json');
+    if (resp.ok) {
+      const cfg = await resp.json();
+      if (cfg.gemini_api_key) { applyKey(cfg.gemini_api_key); return; }
+    }
+  } catch (_) {}
+
+  // 3. Python dev server (legacy local dev)
+  try {
+    const resp = await fetch('/api/config');
+    if (resp.ok) {
+      const cfg = await resp.json();
+      if (cfg.gemini_api_key) { applyKey(cfg.gemini_api_key); return; }
+    }
+  } catch (_) {}
+
+  console.error('Could not load Gemini API key from any source (api.php, config.local.json, /api/config)');
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let lang = localStorage.getItem('er_scanner_lang') || 'en';
+let screen = 'splash';
+let cameraStream = null;
+let currentSpecies = null;
+let isIdentifying = false;
+let searchTimer = null;
+let errorTimer = null;
+
+// Two-tier species databases:
+//   archiveDB  → read-only archive (species.json) — never modified
+//   scannerDB  → scanner-only accumulator (scanner-species.json) — appended to
+let archiveDB  = [];  // loaded once from species.json
+let scannerDB  = [];  // loaded from scanner-species.json, updated on new scans
+let dbsReady   = false;
+let serverWritable = false; // true if PHP can write files
+let phpReachable   = false; // true if api.php responded (even if not writable)
+const searchCache = {};  // ephemeral per-search-render
+let archiveCache  = [];  // indexed array for archive click handlers
+let highlightedSci = null; // scientific name to highlight after scan
+let archiveDirty   = true; // rebuild archive list on next visit
+let prevScreen = 'splash';
+
+// ── i18n strings ──────────────────────────────────────────────────────────
+const T = {
+  en: {
+    subtitle:        'EXTINCTION\nREGISTRY',
+    instruction:     'Scan museum specimens or explore the archive to reveal their conservation status.',
+    open_scanner:    'Open Scanner',
+    tap_to_identify: 'Tap to identify',
+    identifying:     'Identifying...',
+    enriching:       'Enriching...',
+    type_name:       'Type name',
+    not_recognized:  'Species not recognized',
+    try_again:       'Try again',
+    search_manually: 'Search manually',
+    learn_more:      'Learn more',
+    scan_another:    'Scan another',
+    search_placeholder: 'Search species name...',
+    search_prompt:   'Search by species name, common name, or region',
+    back:            'Back',
+    emerged:         'Emerged',
+    described:       'Described',
+    first_threatened:'First threatened',
+    current_status:  'Current status',
+    extinct:         'Extinct',
+    global:          'Global',
+  },
+  nn: {
+    subtitle:        'UTRYDDINGS\nREGISTER',
+    instruction:     'Skann museumseksemplar eller utforsk arkivet for å avdekke bevaringsstatusen deira.',
+    open_scanner:    'Opne skannar',
+    tap_to_identify: 'Trykk for å identifisere',
+    identifying:     'Identifiserer...',
+    enriching:       'Utdjupar...',
+    type_name:       'Skriv namn',
+    not_recognized:  'Arten vart ikkje kjend att',
+    try_again:       'Prøv på nytt',
+    search_manually: 'Søk manuelt',
+    learn_more:      'Les meir',
+    scan_another:    'Skann ein til',
+    search_placeholder: 'Søk etter artnamn...',
+    search_prompt:   'Søk etter artnamn, trivialnamn eller region',
+    back:            'Tilbake',
+    emerged:         'Oppstått',
+    described:       'Skildra',
+    first_threatened:'Først truga',
+    current_status:  'Noverande status',
+    extinct:         'Utrydda',
+    global:          'Globalt',
+  }
+};
+
+// ── Loading phrase sequences ───────────────────────────────────────────────
+// Each phase cycles through its list at PHRASE_INTERVAL ms.
+const PHRASE_INTERVAL = 1800;
+
+const PHRASES = {
+  en: {
+    identifying: [
+      'Identifying...',
+      'Consulting the archive...',
+      'Scanning morphology...',
+      'Comparing specimens...',
+      'Reading the specimen...',
+      'Cross-referencing records...',
+    ],
+    enriching: [
+      'Writing...',
+      'Searching...',
+      'Building the record...',
+      'Downloading...',
+      'Composing the entry...',
+      'Hunting for images...',
+      'Drafting the chronicle...',
+    ],
+  },
+  nn: {
+    identifying: [
+      'Identifiserer...',
+      'Konsulterer arkivet...',
+      'Skannar morfologi...',
+      'Samanliknar eksemplar...',
+      'Les eksemplaret...',
+      'Kryssjekkar register...',
+    ],
+    enriching: [
+      'Skriv...',
+      'Søkjer...',
+      'Byggjer posten...',
+      'Lastar ned...',
+      'Set saman oppslaget...',
+      'Jagar bilete...',
+      'Kladdar krønika...',
+    ],
+  },
+};
+
+let _phraseTimer = null;
+let _phraseIdx   = 0;
+
+function startPhrases(phase) {
+  stopPhrases();
+  const list = PHRASES[lang]?.[phase] || PHRASES.en[phase] || [];
+  _phraseIdx = 0;
+  $('loading-text').textContent = list[0] || '';
+  _phraseTimer = setInterval(() => {
+    _phraseIdx = (_phraseIdx + 1) % list.length;
+    $('loading-text').textContent = list[_phraseIdx];
+  }, PHRASE_INTERVAL);
+}
+
+function stopPhrases() {
+  if (_phraseTimer) { clearInterval(_phraseTimer); _phraseTimer = null; }
+}
+
+// IUCN status metadata
+const IUCN = {
+  EX: { en: 'EXTINCT',               nn: 'UTRYDDA',            cls: 'status-EX',  dot: '#cc2222' },
+  EW: { en: 'EXTINCT IN WILD',        nn: 'UTRYDDA I NATUREN',  cls: 'status-EW',  dot: '#994488' },
+  CR: { en: 'CRITICALLY ENDANGERED',  nn: 'KRITISK TRUGA',      cls: 'status-CR',  dot: '#cc2222' },
+  EN: { en: 'ENDANGERED',             nn: 'STERKT TRUGA',       cls: 'status-EN',  dot: '#c05020' },
+  VU: { en: 'VULNERABLE',             nn: 'SÅRBAR',             cls: 'status-VU',  dot: '#b08010' },
+  NT: { en: 'NEAR THREATENED',        nn: 'NÆR TRUGA',          cls: 'status-NT',  dot: '#607030' },
+  LC: { en: 'LEAST CONCERN',          nn: 'LIVSKRAFTIG',        cls: 'status-LC',  dot: '#2a7a3a' },
+  DD: { en: 'DATA DEFICIENT',         nn: 'DATAMANGEL',         cls: 'status-DD',  dot: '#888888' },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const t  = key => (T[lang] || T.en)[key] || key;
+const si = code => IUCN[code] || { en: code || 'UNKNOWN', nn: code || 'UKJENT', cls: 'status-default', dot: '#888' };
+const norm = s => (s || '').trim().toLowerCase();
+
+function md(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Species Database Layer ────────────────────────────────────────────────
+
+async function loadDBs() {
+  try {
+    // Probe PHP — auto-creates files/dirs if possible, checks writability
+    try {
+      const setup = await fetch('api.php?action=setup').then(r => r.ok ? r.json() : null).catch(() => null);
+      if (setup !== null) {
+        phpReachable = true;
+        if (setup.writable) {
+          serverWritable = true;
+          console.log('Server persistence: ACTIVE', setup.checks);
+        } else {
+          console.log('PHP reachable but not writable — localStorage only', setup.checks);
+        }
+      } else {
+        console.log('PHP unreachable — Python/localStorage fallback');
+      }
+    } catch (_) { console.log('PHP probe failed'); }
+
+    // Load archive (read-only, from static JSON)
+    archiveDB = await fetch('species.json').then(r => r.ok ? r.json() : []).catch(() => []);
+
+    // Load scanner DB from available sources
+    const sources = await Promise.all([
+      // 1. PHP endpoint (shared hosting)
+      fetch('api.php?action=get-species').then(r => r.ok ? r.json() : []).catch(() => []),
+      // 2. Static JSON file (Python server or pre-built)
+      fetch('scanner-species.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      // 3. localStorage (always available)
+      Promise.resolve((() => { try { return JSON.parse(localStorage.getItem('er_scanner_db') || '[]'); } catch(_) { return []; } })()),
+    ]);
+
+    // Merge all sources: start with the largest, add missing from others
+    sources.sort((a, b) => b.length - a.length);
+    const merged = [];
+    const seen = new Set();
+    for (const src of sources) {
+      for (const s of src) {
+        const key = norm(s.scientific_name);
+        if (!seen.has(key)) { merged.push(s); seen.add(key); }
+      }
+    }
+    scannerDB = merged;
+
+    // Sync merged result back to localStorage
+    try { localStorage.setItem('er_scanner_db', JSON.stringify(scannerDB)); } catch(_) {}
+
+    dbsReady = true;
+    archiveDirty = true; // ensure first archive visit builds the list
+    console.log(`DBs loaded: archive=${archiveDB.length}, scanner=${scannerDB.length}, server=${serverWritable ? 'writable' : phpReachable ? 'read-only' : 'offline'}`);
+  } catch (e) {
+    console.warn('DB load error:', e);
+    dbsReady = true;
+  }
+}
+
+/**
+ * Look up a species across both databases.
+ * Scanner DB is checked first (freshest data), then archive.
+ * Returns a unified species object or null.
+ */
+function findSpecies(scientificName) {
+  const key = norm(scientificName);
+
+  // Check scanner DB first
+  const fromScanner = scannerDB.find(s => norm(s.scientific_name) === key);
+  if (fromScanner) return { ...fromScanner, _source: 'scanner' };
+
+  // Then archive
+  const fromArchive = archiveDB.find(s =>
+    norm(s.scientific_name) === key || norm(s.common_name) === key
+  );
+  if (fromArchive) return normalizeArchiveEntry(fromArchive);
+
+  return null;
+}
+
+/** Convert archive species.json format → scanner result format */
+function normalizeArchiveEntry(a) {
+  return {
+    scientific_name:  a.scientific_name,
+    common_name_en:   a.common_name || a.scientific_name,
+    common_name_nn:   null,
+    class:            a.class || null,
+    order:            a.order || null,
+    family:           a.family || null,
+    iucn_status:      a.iucn_status,
+    primary_cause:    a.primary_cause || null,
+    last_sighting_year: a.last_sighting_year || null,
+    region:           a.region || null,
+    synopsis_en:      a.synopsis_en || null,
+    synopsis_nn:      a.synopsis_nn || null,
+    extra_narrative_en: a.extra_narrative_en || null,
+    extra_narrative_nn: a.extra_narrative_nn || null,
+    image_url:        a.image_url || null,
+    wikipedia_url:    a.wikipedia_url || `https://en.wikipedia.org/wiki/${a.scientific_name.replace(/ /g,'_')}`,
+    _source:          'archive',
+  };
+}
+
+/**
+ * Search both DBs by query string. Returns up to `limit` results.
+ */
+function searchSpeciesLocal(q, limit = 20) {
+  const key = norm(q);
+  const seen = new Set();
+  const results = [];
+
+  // helper: score + collect
+  const check = (entry, source) => {
+    const sn = norm(entry.scientific_name || '');
+    if (seen.has(sn)) return;
+    const cn = norm(entry.common_name_en || entry.common_name || '');
+    const region = norm(entry.region || '');
+    if (sn.includes(key) || cn.includes(key) || region.includes(key)) {
+      seen.add(sn);
+      const obj = source === 'archive' ? normalizeArchiveEntry(entry) : { ...entry, _source: 'scanner' };
+      results.push(obj);
+    }
+  };
+
+  // Scanner first (newer entries surface first), then archive
+  scannerDB.forEach(s => check(s, 'scanner'));
+  archiveDB.forEach(s => check(s, 'archive'));
+
+  // Sort: EX/EW first, then alphabetical
+  results.sort((a, b) => {
+    const oa = a.iucn_status === 'EX' ? 0 : a.iucn_status === 'EW' ? 1 : 2;
+    const ob = b.iucn_status === 'EX' ? 0 : b.iucn_status === 'EW' ? 1 : 2;
+    if (oa !== ob) return oa - ob;
+    return (a.common_name_en || a.scientific_name).localeCompare(b.common_name_en || b.scientific_name);
+  });
+
+  return results.slice(0, limit);
+}
+
+// ── Extinct subspecies correction table ───────────────────────────────────
+// Gemini sometimes returns the parent species (LC/NT) when the museum specimen
+// is an extinct subspecies. This table overrides status and scientific name
+// by matching against common name or scientific name (case-insensitive prefix).
+const EXTINCT_OVERRIDES = [
+  { match: ['bubal hartebeest', 'alcelaphus buselaphus buselaphus', 'alcelaphus buselaphus'],
+    scientific_name: 'Alcelaphus buselaphus buselaphus',
+    common_name_en:  'Bubal Hartebeest',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies of the hartebeest, last seen ~1925; parent species A. buselaphus is LC.' },
+  { match: ['quagga', 'equus quagga quagga'],
+    scientific_name: 'Equus quagga quagga',
+    common_name_en:  'Quagga',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies of the plains zebra, last seen 1883; parent species E. quagga is LC.' },
+  { match: ['bali tiger', 'panthera tigris balica'],
+    scientific_name: 'Panthera tigris balica',
+    common_name_en:  'Bali Tiger',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies; last confirmed 1937.' },
+  { match: ['caspian tiger', 'panthera tigris virgata'],
+    scientific_name: 'Panthera tigris virgata',
+    common_name_en:  'Caspian Tiger',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies; last confirmed 1970s.' },
+  { match: ['javan tiger', 'panthera tigris sondaica'],
+    scientific_name: 'Panthera tigris sondaica',
+    common_name_en:  'Javan Tiger',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies; last confirmed 1976.' },
+  { match: ['schomburgk', 'rucervus schomburgki', 'cervus schomburgki'],
+    scientific_name: 'Rucervus schomburgki',
+    common_name_en:  "Schomburgk's Deer",
+    iucn_status:     'EX',
+    notes:           'Extinct since 1938.' },
+  { match: ['thylacine', 'tasmanian tiger', 'tasmanian wolf', 'thylacinus cynocephalus'],
+    scientific_name: 'Thylacinus cynocephalus',
+    common_name_en:  'Thylacine',
+    iucn_status:     'EX',
+    notes:           'Last confirmed individual died in captivity 1936.' },
+  { match: ['passenger pigeon', 'ectopistes migratorius'],
+    scientific_name: 'Ectopistes migratorius',
+    common_name_en:  'Passenger Pigeon',
+    iucn_status:     'EX',
+    notes:           'Extinct 1914; once the most numerous bird in North America.' },
+  { match: ['dodo', 'raphus cucullatus'],
+    scientific_name: 'Raphus cucullatus',
+    common_name_en:  'Dodo',
+    iucn_status:     'EX',
+    notes:           'Extinct ~1681.' },
+  { match: ['great auk', 'pinguinus impennis'],
+    scientific_name: 'Pinguinus impennis',
+    common_name_en:  'Great Auk',
+    iucn_status:     'EX',
+    notes:           'Extinct 1844.' },
+  { match: ['steller\'s sea cow', 'hydrodamalis gigas'],
+    scientific_name: 'Hydrodamalis gigas',
+    common_name_en:  "Steller's Sea Cow",
+    iucn_status:     'EX',
+    notes:           'Extinct 1768, hunted to extinction within 27 years of discovery.' },
+  { match: ['irish elk', 'megaloceros giganteus'],
+    scientific_name: 'Megaloceros giganteus',
+    common_name_en:  'Irish Elk',
+    iucn_status:     'EX',
+    notes:           'Extinct ~7,700 years ago.' },
+  { match: ['cape lion', 'panthera leo melanochaita'],
+    scientific_name: 'Panthera leo melanochaita',
+    common_name_en:  'Cape Lion',
+    iucn_status:     'EX',
+    notes:           'Extinct subspecies of the African lion; last confirmed 1858.' },
+];
+
+/**
+ * If Gemini returns a living-species status for what is actually an extinct
+ * subspecies, correct the record using the override table.
+ */
+function applyExtinctOverride(gemini) {
+  const cn = (gemini.common_name_en || '').toLowerCase();
+  const sn = (gemini.scientific_name || '').toLowerCase();
+  for (const rule of EXTINCT_OVERRIDES) {
+    if (rule.match.some(m => cn.includes(m) || sn.includes(m) || m.includes(cn) || m.includes(sn))) {
+      if (gemini.iucn_status !== 'EX') {
+        console.warn(`Override: ${gemini.scientific_name} (${gemini.iucn_status}) → EX [${rule.scientific_name}]`);
+      }
+      return {
+        ...gemini,
+        scientific_name: rule.scientific_name,
+        common_name_en:  rule.common_name_en,
+        iucn_status:     'EX',
+        notes:           rule.notes,
+      };
+    }
+  }
+  return gemini;
+}
+
+// ── Gemini helpers ────────────────────────────────────────────────────────
+
+async function callGemini(prompt, image) {
+  const parts = [{ text: prompt }];
+  if (image) {
+    parts.push({ inlineData: { mimeType: 'image/jpeg', data: image } });
+  }
+  const resp = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts }] })
+  });
+  if (!resp.ok) throw new Error(`Gemini ${resp.status}`);
+  const json = await resp.json();
+  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Empty Gemini response');
+  // Extract JSON from response — handles both raw JSON and ```json ... ``` fences
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const raw    = fenced ? fenced[1] : text.replace(/^[^{[]*/, '').replace(/[^}\]]*$/, '');
+  return JSON.parse(raw);
+}
+
+// ── Synopsis generation ───────────────────────────────────────────────────
+
+async function generateSynopsis(scientificName, commonName, iucnStatus) {
+  const extinctNote = iucnStatus === 'EX'
+    ? '\nCRITICAL: This species/subspecies is EXTINCT. Write entirely in past tense. Treat its disappearance as fact, not risk. Do not use phrases like "once thrived" ambiguously — be direct about its extinction.'
+    : '';
+  const prompt = `Generate a succinctly expressed, vaguely spicy and playful micro-paragraph synopsis of the evolution and history of the species "${scientificName}" (${commonName || 'unknown common name'}, IUCN status: ${iucnStatus || 'unknown'}).
+The tone should be museum-quality but with a sharp, witty edge. Max 3 sentences.
+CRITICAL: Bold the first phrase before the first comma using **markdown**.${extinctNote}
+
+Return as JSON:
+{
+  "en": "English synopsis with **bold** opening phrase",
+  "nn": "Nynorsk synopsis with **bold** opening phrase"
+}`;
+
+  try {
+    const result = await callGemini(prompt);
+    return { en: result.en || null, nn: result.nn || null };
+  } catch (e) {
+    console.error('Synopsis generation failed:', e);
+    return { en: null, nn: null };
+  }
+}
+
+// ── Image search ─────────────────────────────────────────────────────────
+// Four-strategy cascade; all CORS-open, no API key required.
+//   1. Wikipedia pageimages by scientific name
+//   2. Wikipedia pageimages by common name   ← fixes "Hoatzin", "Virginia Opossum" etc.
+//   3. Wikimedia Commons File-namespace search with open-license preference
+//   4. iNaturalist taxa API                  ← broad coverage, CC-licensed photos
+
+async function _wpPageImage(title) {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query` +
+      `&titles=${encodeURIComponent(title)}&prop=pageimages` +
+      `&format=json&pithumbsize=900&origin=*`;
+    const data = await (await fetch(url)).json();
+    for (const page of Object.values(data?.query?.pages || {})) {
+      if (page.thumbnail?.source) return page.thumbnail.source;
+    }
+  } catch (e) { console.warn(`WP pageimage "${title}":`, e.message); }
+  return null;
+}
+
+async function findWikimediaImage(scientificName, commonName) {
+  const sciTitle = scientificName.replace(/ /g, '_');
+  const comTitle = (commonName || '').replace(/ /g, '_');
+
+  // ── 1. Wikipedia by scientific name ──
+  let img = await _wpPageImage(sciTitle);
+  if (img) return img;
+
+  // ── 2. Wikipedia by common name ──
+  if (comTitle && comTitle !== sciTitle) {
+    img = await _wpPageImage(comTitle);
+    if (img) return img;
+  }
+
+  // ── 3. Wikimedia Commons — File namespace, open-license preferred ──
+  const queries = [scientificName, commonName].filter(Boolean);
+  for (const q of queries) {
+    try {
+      const cUrl = `https://commons.wikimedia.org/w/api.php?action=query` +
+        `&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrnamespace=6&gsrlimit=6` +
+        `&prop=imageinfo&iiprop=url|extmetadata|mime&iiurlwidth=900` +
+        `&format=json&origin=*`;
+      const data = await (await fetch(cUrl)).json();
+      const pages = Object.values(data?.query?.pages || {});
+
+      // Prefer explicitly open licenses (PD / CC)
+      const isOpen = info => {
+        const lic = (info?.extmetadata?.LicenseShortName?.value || '').toLowerCase();
+        return !lic || lic.startsWith('cc') || lic.includes('pd') || lic.includes('public');
+      };
+      const isImage = p => (p.imageinfo?.[0]?.mime || '').startsWith('image/');
+
+      for (const page of pages.filter(isImage)) {
+        const info = page.imageinfo[0];
+        if (isOpen(info)) return info.thumburl || info.url;
+      }
+      // Accept any image if nothing open-licensed found
+      for (const page of pages.filter(isImage)) {
+        const info = page.imageinfo[0];
+        if (info?.thumburl || info?.url) return info.thumburl || info.url;
+      }
+    } catch (e) { console.warn(`Commons search "${q}":`, e.message); }
+  }
+
+  // ── 4. iNaturalist taxa (excellent species coverage, CC photos) ──
+  try {
+    const iUrl = `https://api.inaturalist.org/v1/taxa?q=` +
+      `${encodeURIComponent(scientificName)}&per_page=5&is_active=true`;
+    const data = await (await fetch(iUrl)).json();
+    const results = data?.results || [];
+
+    // First pass: strict name match + open license
+    for (const taxon of results) {
+      if ((taxon.name || '').toLowerCase() !== scientificName.toLowerCase()) continue;
+      const photo = taxon.default_photo;
+      if (!photo?.medium_url) continue;
+      const lic = (photo.license_code || '').toLowerCase();
+      if (!lic || lic.startsWith('cc') || lic === 'pd') return photo.medium_url;
+    }
+    // Second pass: any name match (subspecies, synonyms)
+    for (const taxon of results) {
+      const photo = taxon.default_photo;
+      if (photo?.medium_url) return photo.medium_url;
+    }
+  } catch (e) { console.warn('iNaturalist lookup:', e.message); }
+
+  return null;
+}
+
+/**
+ * Produce a timestamped filename for a scan photo.
+ * e.g. "Hoatzin_2026-03-25_14-30-00.jpg"
+ */
+function scanPhotoFilename(commonName) {
+  const ts  = new Date().toISOString()
+                .replace('T', '_')
+                .replace(/:/g, '-')
+                .replace(/\.\d+Z$/, '');
+  const name = (commonName || 'unknown')
+                .replace(/[^\w\s-]/g, '')
+                .trim()
+                .replace(/\s+/g, '_');
+  return `${name}_${ts}.jpg`;
+}
+
+/**
+ * Save the user's scan photo (base64 data-URL) to scanned/ on the server.
+ * Returns the local path on success, or the data-URL as a last resort.
+ */
+async function saveScanPhoto(dataUrl, filename) {
+  if (serverWritable) {
+    try {
+      const resp = await fetch('api.php?action=save-scan-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b64: dataUrl, filename })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.path) { console.log(`Scan photo saved: ${data.path}`); return data.path; }
+      }
+    } catch (_) {}
+  }
+  // Local dev — stash as data-URL (no writable server)
+  console.log('Scan photo: storing as data-URL (no writable server)');
+  return dataUrl;
+}
+
+/**
+ * Resolve the best available image for a species.
+ * Priority: cached wiki image → raw wiki URL → user's scan photo.
+ *
+ * @param {string|null} wikiImageUrl   - URL from Wikimedia (may be null)
+ * @param {string}      scientificName - used for wiki-download filename
+ * @param {string}      commonName     - used for scan-photo filename
+ * @param {string}      scanDataUrl    - base64 JPEG from camera (fallback)
+ */
+async function resolveImage(wikiImageUrl, scientificName, commonName, scanDataUrl) {
+  const wikiFilename = scientificName.toLowerCase().replace(/ /g, '_') + '.jpg';
+
+  if (wikiImageUrl) {
+    // Try server-side caching only if server is writable
+    if (serverWritable) {
+      try {
+        const resp = await fetch('api.php?action=download-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: wikiImageUrl, filename: wikiFilename })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data?.path) { console.log(`Image cached: ${data.path}`); return data.path; }
+        }
+      } catch (_) {}
+    }
+
+    // Try Python scanner-server.py — only when PHP is unreachable (local dev)
+    if (!phpReachable) {
+      try {
+        const resp = await fetch('/api/scanner/download-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: wikiImageUrl, filename: wikiFilename })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data?.path) return data.path;
+        }
+      } catch (_) {}
+    }
+
+    // Use Wikimedia URL directly (not locally cached, but works)
+    return wikiImageUrl;
+  }
+
+  // ── No wiki image found — fall back to user's scan photo ──
+  if (scanDataUrl) {
+    console.log('No wiki image — using scan photo as fallback');
+    return await saveScanPhoto(scanDataUrl, scanPhotoFilename(commonName));
+  }
+
+  return null;
+}
+
+/**
+ * Save a species to the scanner DB.
+ * Three-tier persistence: localStorage → api.php → scanner-server.py
+ */
+async function saveToScannerDB(species) {
+  // Update in-memory copy
+  const idx = scannerDB.findIndex(s => norm(s.scientific_name) === norm(species.scientific_name));
+  if (idx >= 0) scannerDB[idx] = { ...scannerDB[idx], ...species };
+  else scannerDB.push(species);
+
+  // 1. localStorage (always works)
+  try {
+    localStorage.setItem('er_scanner_db', JSON.stringify(scannerDB));
+    console.log(`localStorage: saved ${species.scientific_name}`);
+  } catch (e) { console.warn('localStorage save failed:', e); }
+
+  // 2. Server persistence (only if probe succeeded)
+  if (serverWritable) {
+    try {
+      const resp = await fetch('api.php?action=save-species', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(species)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        console.log(`api.php: saved ${species.scientific_name} (total: ${data.total})`);
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // 3. Python scanner-server.py — only when PHP is unreachable (local dev)
+  if (!phpReachable) {
+    try {
+      const resp = await fetch('/api/scanner/species', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(species)
+      });
+      if (resp.ok) console.log(`scanner-server.py: saved ${species.scientific_name}`);
+    } catch (_) {}
+  }
+}
+
+// ── Language ──────────────────────────────────────────────────────────────
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('er_scanner_lang', lang);
+  applyLang();
+}
+function toggleLang() { setLang(lang === 'en' ? 'nn' : 'en'); }
+
+function applyLang() {
+  $('splash-btn-en').className = lang === 'en' ? 'active' : 'inactive';
+  $('splash-btn-nn').className = lang === 'nn' ? 'active' : 'inactive';
+  $('nav-en').className = 'l ' + (lang === 'en' ? 'active' : 'inactive');
+  $('nav-nn').className = 'l ' + (lang === 'nn' ? 'active' : 'inactive');
+  $('splash-subtitle').textContent    = t('subtitle');
+  $('splash-instruction').textContent = t('instruction');
+  $('btn-open-scanner').textContent   = t('open_scanner');
+  $('scanner-lang-display').textContent = lang.toUpperCase();
+  $('scanner-hint').textContent  = isIdentifying ? t('identifying') : t('tap_to_identify');
+  $('btn-type-name').textContent = t('type_name');
+  $('loading-text').textContent  = t('identifying');
+  $('btn-try-again').textContent       = t('try_again');
+  $('btn-search-manually').textContent = t('search_manually');
+  $('search-input').placeholder = t('search_placeholder');
+  $('btn-about-back').textContent = t('back');
+  $('about-en').style.display = lang === 'en' ? '' : 'none';
+  $('about-nn').style.display = lang === 'nn' ? '' : 'none';
+  $('btn-wiki-label').textContent = t('learn_more');
+  if (currentSpecies && screen === 'result') {
+    renderResult(currentSpecies);
+  }
+}
+
+// ── Screen navigation ─────────────────────────────────────────────────────
+function go(target) {
+  prevScreen = screen;
+  if (screen === 'scanner' && target !== 'scanner') stopCamera();
+  if (target === 'scanner' && screen !== 'scanner') startCamera();
+  // Build / scroll archive list
+  if (target === 'archive') {
+    if (archiveDirty) { buildArchiveList(highlightedSci); archiveDirty = false; }
+    else requestAnimationFrame(scrollToHighlighted);
+  }
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  const el = $('screen-' + target);
+  if (el) el.classList.add('active');
+  $('top-nav').classList.toggle('visible', target !== 'splash');
+  // Nav icon active state — result & archive both highlight the archive icon
+  const iconMap = { scanner: 'nav-icon-camera', archive: 'nav-icon-archive',
+                    result:  'nav-icon-archive', search: 'nav-icon-search' };
+  document.querySelectorAll('.nav-icon').forEach(d => d.classList.remove('active'));
+  const ic = $(iconMap[target]);
+  if (ic) ic.classList.add('active');
+  screen = target;
+  applyLang();
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────
+async function startCamera() {
+  // Camera API requires a secure context (HTTPS or localhost)
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.error('Camera unavailable: page must be served over HTTPS to access the camera.');
+    showError('Camera requires HTTPS. Use the search tab instead.');
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
+    const video = $('scanner-video');
+    video.srcObject = cameraStream;
+    const settings = cameraStream.getVideoTracks()[0].getSettings();
+    video.classList.toggle('mirrored', settings.facingMode === 'user' || !settings.facingMode);
+  } catch (err) {
+    console.error('Camera error:', err);
+    showError('Camera access denied. Use search instead.');
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(tr => tr.stop());
+    cameraStream = null;
+  }
+}
+
+// ── Gemini vision prompt ──────────────────────────────────────────────────
+const IDENTIFY_PROMPT = `You are a taxonomic identification system for a natural history museum app at the University Museum of Bergen (Universitetsmuseet i Bergen). Analyze this image and identify the biological species shown. The subject may be: a living animal, a taxidermy mount, a preserved specimen in a jar or alcohol, a mounted skeleton, a pinned insect, a pressed botanical specimen, a museum display label, a diorama, or an illustration/painting of a species.
+
+CRITICAL — IUCN STATUS AND EXTINCT SUBSPECIES:
+Museum specimens very frequently represent extinct subspecies whose parent species is still listed as LC or NT on IUCN. You must identify to subspecies level wherever the specimen may represent an extinct form, and return EX status accordingly. Common traps to avoid:
+- Bubal Hartebeest = Alcelaphus buselaphus buselaphus → EX (extinct ~1925). The parent A. buselaphus is LC — do not use that.
+- Quagga = Equus quagga quagga → EX (extinct 1883). The parent E. quagga is LC.
+- Bali Tiger = Panthera tigris balica → EX (extinct ~1950). The parent P. tigris is EN.
+- Caspian Tiger = Panthera tigris virgata → EX. The parent P. tigris is EN.
+- Schomburgk's Deer = Rucervus schomburgki → EX (extinct 1938).
+- Thylacine = Thylacinus cynocephalus → EX (extinct 1936).
+- Passenger Pigeon = Ectopistes migratorius → EX (extinct 1914).
+Rule: if the specimen in a natural history museum display represents a named form known to be extinct, return EX and use the most specific correct scientific name (trinomial if appropriate). Do not let a surviving parent species' LC/NT status override a subspecies that is definitively extinct.
+
+Return your identification as JSON:
+{
+  "common_name_en": "string",
+  "common_name_nn": "string (Nynorsk name if known, otherwise null)",
+  "scientific_name": "string (use trinomial if the extinct subspecies differs from the extant parent)",
+  "class": "string (Mammalia, Aves, Reptilia, Amphibia, Actinopterygii, Insecta, Arachnida, Gastropoda, Magnoliopsida, etc.)",
+  "order": "string",
+  "family": "string",
+  "iucn_status": "string (EX, EW, CR, EN, VU, NT, LC, DD — use EX for extinct subspecies even if parent species is LC)",
+  "confidence": "high | medium | low",
+  "notes": "string (note if this is an extinct subspecies of an otherwise extant species)"
+}
+
+If you cannot identify the species, return:
+{"error": "Unable to identify species", "suggestions": ["possible species 1", "possible species 2"]}`;
+
+// ── Capture & Identify (full pipeline) ────────────────────────────────────
+async function captureAndIdentify() {
+  if (!GEMINI_URL) {
+    showError('API key not loaded — check server config.');
+    console.error('captureAndIdentify: GEMINI_URL is empty. loadConfig() likely failed.');
+    return;
+  }
+  const video  = $('scanner-video');
+  const canvas = $('capture-canvas');
+  if (!video.videoWidth || isIdentifying) return;
+
+  isIdentifying = true;
+  $('btn-capture').disabled = true;
+  $('scanner-loading').classList.add('visible');
+  $('scanner-hint').textContent = t('identifying');
+  startPhrases('identifying');
+  dismissError();
+
+  // Crop center 65% square → max 512px
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const crop = Math.min(vw, vh) * 0.65;
+  const cx = (vw - crop) / 2, cy = (vh - crop) / 2;
+  const out = Math.min(crop, 512);
+  canvas.width = out; canvas.height = out;
+  canvas.getContext('2d').drawImage(video, cx, cy, crop, crop, 0, 0, out, out);
+  const b64     = canvas.toDataURL('image/jpeg', 0.5);
+  const b64Data = b64.split(',')[1];
+
+  try {
+    // ── Step 1: Gemini vision identification ──
+    const raw = await callGemini(IDENTIFY_PROMPT, b64Data);
+    if (raw.error || !raw.scientific_name) {
+      showError(t('not_recognized')); return;
+    }
+    // Apply extinct-subspecies correction before any further processing
+    const gemini = applyExtinctOverride(raw);
+    console.log('Gemini identified:', gemini.scientific_name, gemini.common_name_en, `[${gemini.iucn_status}]`);
+
+    // ── Step 2: Check existing databases ──
+    const existing = findSpecies(gemini.scientific_name);
+    if (existing && existing.image_url) {
+      console.log(`Found in ${existing._source} DB — showing existing card`);
+      showResult(existing);
+      return;
+    }
+    if (existing) {
+      console.log(`Found in ${existing._source} DB but image missing — re-enriching image...`);
+    }
+
+    // ── Step 3: New species (or missing image) — enrich ──
+    console.log(existing ? 'Re-fetching image...' : 'New species — generating synopsis + finding image...');
+    startPhrases('enriching');
+
+    // Run synopsis generation and image search in parallel
+    // If re-enriching an existing card, skip synopsis (already have it); only find image
+    const [synopsis, wikiImageUrl] = existing
+      ? [{ en: existing.synopsis_en, nn: existing.synopsis_nn },
+         await findWikimediaImage(gemini.scientific_name, gemini.common_name_en)]
+      : await Promise.all([
+          generateSynopsis(gemini.scientific_name, gemini.common_name_en, gemini.iucn_status),
+          findWikimediaImage(gemini.scientific_name, gemini.common_name_en),
+        ]);
+
+    // Resolve image: wiki cache → raw wiki URL → user's scan photo as fallback
+    const imageUrl = await resolveImage(wikiImageUrl, gemini.scientific_name, gemini.common_name_en, b64);
+
+    // ── Step 4: Build full species object (merge over existing if re-enriching) ──
+    const species = {
+      ...(existing || {}),
+      scientific_name:  gemini.scientific_name,
+      common_name_en:   gemini.common_name_en,
+      common_name_nn:   gemini.common_name_nn || existing?.common_name_nn || null,
+      class:            gemini.class,
+      order:            gemini.order,
+      family:           gemini.family,
+      iucn_status:      gemini.iucn_status,
+      synopsis_en:      synopsis.en,
+      synopsis_nn:      synopsis.nn,
+      image_url:        imageUrl,
+      wikipedia_url:    `https://en.wikipedia.org/wiki/${gemini.scientific_name.replace(/ /g, '_')}`,
+      notes:            gemini.notes || existing?.notes || null,
+      confidence:       gemini.confidence || 'medium',
+      scanned_at:       existing?.scanned_at || new Date().toISOString(),
+    };
+
+    // ── Step 5: Save to scanner DB (non-blocking) ──
+    saveToScannerDB(species);
+
+    // ── Step 6: Show result ──
+    showResult(species);
+
+  } catch (err) {
+    console.error('Identify error:', err);
+    showError(t('not_recognized'));
+  } finally {
+    isIdentifying = false;
+    stopPhrases();
+    $('btn-capture').disabled = false;
+    $('scanner-loading').classList.remove('visible');
+    $('scanner-hint').textContent = t('tap_to_identify');
+    $('loading-text').textContent = PHRASES[lang]?.identifying[0] || 'Identifying...';
+  }
+}
+
+// ── Error handling ────────────────────────────────────────────────────────
+function showError(msg) {
+  $('error-msg').textContent = msg;
+  $('scanner-error').classList.add('visible');
+  if (errorTimer) clearTimeout(errorTimer);
+  errorTimer = setTimeout(dismissError, 4500);
+}
+function dismissError() {
+  $('scanner-error').classList.remove('visible');
+  if (errorTimer) { clearTimeout(errorTimer); errorTimer = null; }
+}
+
+// ── Result panel ──────────────────────────────────────────────────────────
+// After a scan or search selection: navigate to archive.html,
+// landing on the species card at its alphabetical position.
+function showResult(species) {
+  window.location.href = 'archive.html?species=' + encodeURIComponent(species.scientific_name);
+}
+
+function openResult(species) {
+  window.location.href = 'archive.html?species=' + encodeURIComponent(species.scientific_name);
+}
+
+function closeResult() {
+  go(prevScreen === 'archive' || prevScreen === 'search' ? prevScreen : 'archive');
+}
+
+// ── Archive list ──────────────────────────────────────────────────────────
+
+function buildArchiveList(highlightSci) {
+  // Merge scanner (newer) + archive, deduplicated
+  const seen = new Set();
+  const all  = [];
+  for (const s of scannerDB) {
+    const k = norm(s.scientific_name);
+    if (!seen.has(k)) { all.push({ ...s, _source: 'scanner' }); seen.add(k); }
+  }
+  for (const s of archiveDB) {
+    const k = norm(s.scientific_name);
+    if (!seen.has(k)) { all.push(normalizeArchiveEntry(s)); seen.add(k); }
+  }
+  // Sort alphabetically by English common name
+  all.sort((a, b) => {
+    const na = (a.common_name_en || a.common_name || a.scientific_name).toLowerCase();
+    const nb = (b.common_name_en || b.common_name || b.scientific_name).toLowerCase();
+    return na.localeCompare(nb);
+  });
+  archiveCache = all;
+
+  const hiKey = norm(highlightSci || '');
+  let html = '';
+
+  all.forEach((sp, i) => {
+    const s      = si(sp.iucn_status);
+    const isNew  = norm(sp.scientific_name) === hiKey;
+    const name   = lang === 'nn'
+      ? (sp.common_name_nn || sp.common_name_en || sp.common_name || sp.scientific_name)
+      : (sp.common_name_en || sp.common_name || sp.scientific_name);
+
+    // Synopsis shown inline only for the highlighted (just-scanned) item
+    const synopsis = lang === 'nn'
+      ? (sp.synopsis_nn || sp.synopsis_en)
+      : (sp.synopsis_en || sp.synopsis_nn);
+    const synHtml = (isNew && synopsis)
+      ? `<span class="archive-item-synopsis">${md(synopsis)}</span>` : '';
+
+    const newTag  = (isNew && sp._source === 'scanner')
+      ? `<span class="archive-new-tag">new</span>` : '';
+
+    html += `<div class="archive-item${isNew ? ' archive-highlight' : ''}" id="ar-${i}" onclick="selectArchiveItem(${i})">
+      <div class="archive-item-bar" style="background:${s.dot}"></div>
+      <div class="archive-item-body">
+        <span class="archive-item-name">${name}${newTag}</span>
+        <span class="archive-item-sci">${sp.scientific_name}</span>
+        ${synHtml}
+      </div>
+      <span class="archive-item-badge" style="background:${s.dot}">${sp.iucn_status || '?'}</span>
+    </div>`;
+  });
+
+  $('archive-list').innerHTML = html || `<div class="archive-empty">No species found</div>`;
+
+  if (hiKey) requestAnimationFrame(scrollToHighlighted);
+}
+
+function scrollToHighlighted() {
+  const el = document.querySelector('#screen-archive .archive-highlight');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function selectArchiveItem(idx) {
+  const sp = archiveCache[idx];
+  if (!sp) return;
+  openResult(sp);
+}
+
+function renderResult(sp) {
+  const s   = si(sp.iucn_status);
+  const lbl = lang === 'nn' ? s.nn : s.en;
+  const primary   = lang === 'nn' ? (sp.common_name_nn || sp.common_name_en || sp.common_name) : (sp.common_name_en || sp.common_name);
+  const secondary = lang === 'nn' && sp.common_name_nn
+    ? (sp.common_name_en || sp.common_name || '')
+    : (sp.common_name_nn || '');
+
+  // Image
+  const imgWrap = $('result-image-wrap');
+  const imgEl   = $('result-image');
+  if (sp.image_url && sp.image_url !== 'none') {
+    imgEl.src = sp.image_url;
+    imgEl.alt = primary || sp.scientific_name;
+    imgWrap.style.display = '';
+  } else {
+    imgWrap.style.display = 'none';
+  }
+
+  $('result-common').textContent     = primary || sp.scientific_name;
+  $('result-secondary').textContent  = secondary;
+  $('result-scientific').textContent = sp.scientific_name;
+  $('result-taxonomy').textContent   = [sp.class, sp.family].filter(Boolean).join(' • ');
+
+  // Badge
+  const badge = $('result-badge');
+  badge.textContent = lbl;
+  badge.className   = 'result-badge ' + s.cls;
+
+  // Stripe
+  $('result-stripe').className = 'result-stripe ' + s.cls;
+
+  // Timeline
+  const tl = $('result-timeline');
+  tl.innerHTML = '';
+  const items = [
+    sp.emergence             && { label: t('emerged'),           val: sp.emergence },
+    sp.described_year        && { label: t('described'),          val: String(sp.described_year) },
+    sp.first_threatened_year && { label: t('first_threatened'),  val: String(sp.first_threatened_year) },
+    sp.last_sighting_year    && { label: t('extinct'),           val: String(sp.last_sighting_year) },
+    sp.region                && { label: t('global'),            val: sp.region },
+    { label: t('current_status'), val: `${new Date().getFullYear()} — ${lbl}` },
+  ].filter(Boolean);
+
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'timeline-item';
+    div.innerHTML = `<div class="timeline-label">${item.label}</div>
+                     <div class="timeline-value">${item.val}</div>`;
+    tl.appendChild(div);
+  });
+
+  if (sp.primary_cause) {
+    const d = document.createElement('div');
+    d.className = 'timeline-cause'; d.textContent = sp.primary_cause;
+    tl.appendChild(d);
+  }
+
+  // Synopsis (bilingual: pick by lang)
+  const synText = lang === 'nn' ? (sp.synopsis_nn || sp.synopsis_en) : (sp.synopsis_en || sp.synopsis_nn);
+  const synEl = $('result-synopsis');
+  if (synText) {
+    synEl.innerHTML = md(synText);
+    synEl.style.display = '';
+  } else {
+    synEl.style.display = 'none';
+  }
+
+  // Extra narratives
+  const narEl = $('result-narrative');
+  const extras = lang === 'nn' ? (sp.extra_narrative_nn || sp.extra_narrative_en) : (sp.extra_narrative_en || sp.extra_narrative_nn);
+  if (extras && Array.isArray(extras) && extras.length) {
+    narEl.innerHTML = extras.map(n => md(n)).join('<br><br>');
+    narEl.style.display = '';
+  } else {
+    narEl.style.display = 'none';
+  }
+
+  $('btn-wiki-label').textContent = t('learn_more');
+}
+
+function openWiki() {
+  if (currentSpecies?.wikipedia_url) window.open(currentSpecies.wikipedia_url, '_blank');
+}
+
+// ── Manual Search (fully client-side against both DBs) ───────────────────
+function initSearch() {
+  const input = $('search-input');
+
+  const observer = new MutationObserver(() => {
+    if ($('screen-search').classList.contains('active')) {
+      setTimeout(() => input.focus(), 100);
+    }
+  });
+  observer.observe($('screen-search'), { attributes: true, attributeFilter: ['class'] });
+
+  input.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = input.value.trim();
+    if (q.length < 2) { renderSearchPrompt(); return; }
+    $('search-results').innerHTML = `<div class="search-loading">${t('identifying')}</div>`;
+    searchTimer = setTimeout(() => doSearch(q), 200);
+  });
+}
+
+function renderSearchPrompt() {
+  $('search-results').innerHTML = `<div class="search-empty">${t('search_prompt')}</div>`;
+}
+
+function doSearch(q) {
+  const results = searchSpeciesLocal(q);
+  renderSearchResults(results);
+}
+
+function renderSearchResults(rows) {
+  const container = $('search-results');
+  if (!rows || !rows.length) {
+    container.innerHTML = `<div class="search-empty">${t('not_recognized')}</div>`;
+    return;
+  }
+  let html = `<div class="search-section-label">◈ Extinction Archive</div>`;
+  rows.forEach((r, i) => {
+    const s   = si(r.iucn_status);
+    const lbl = lang === 'nn' ? s.nn : s.en;
+    const name = r.common_name_en || r.common_name || r.scientific_name;
+    const thumbInner = r.image_url && r.image_url !== 'none'
+      ? `<img src="${r.image_url}" alt="${name.replace(/"/g,'')}" loading="lazy">`
+      : `<div class="search-thumb-empty">
+           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+           </svg>
+         </div>`;
+    searchCache[i] = r;
+    html += `
+      <button class="search-result-item" onclick="selectResult(${i})">
+        <div class="search-thumb">${thumbInner}</div>
+        <div class="search-result-text">
+          <div class="search-result-name">
+            <span>${name}</span>
+            <span class="search-status-dot ${s.cls}" style="background:${s.dot}"></span>
+          </div>
+          <div class="search-result-sci">${r.scientific_name}</div>
+          <div class="search-result-status">${lbl}</div>
+        </div>
+      </button>`;
+  });
+  container.innerHTML = html;
+}
+
+function selectResult(idx) {
+  const r = searchCache[idx];
+  if (!r) return;
+  openResult(r);
+}
+
+// ── Keyboard Navigation ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const active = document.activeElement;
+  const isInput = active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA';
+
+  if (e.key === 'Escape') {
+    active?.blur();
+    if (screen === 'result') { closeResult(); return; }
+    return;
+  }
+  if (isInput) {
+    if (e.key === 'ArrowLeft' && active.value === '') { active.blur(); go('scanner'); }
+    return;
+  }
+  switch (screen) {
+    case 'splash':   if (e.key === 'ArrowRight') go('scanner'); break;
+    case 'scanner':
+      if (e.key === 'ArrowLeft')  go('splash');
+      if (e.key === 'ArrowRight') window.location.href = 'archive.html';
+      break;
+    case 'result':   if (e.key === 'ArrowLeft' || e.key === 'Escape') closeResult(); break;
+    case 'search':   if (e.key === 'ArrowLeft') window.location.href = 'archive.html'; break;
+  }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+(async () => {
+  // Apply language strings immediately — no network needed, eliminates
+  // the flash of the unstyled empty red button before loadDBs() resolves.
+  applyLang();
+  initSearch();
+  renderSearchPrompt();
+  await Promise.all([loadConfig(), loadDBs()]);
+  // ?go=camera → skip splash, open camera immediately (e.g. from archive header icon)
+  if (new URLSearchParams(location.search).get('go') === 'camera') {
+    go('scanner');
+  }
+})();
+</script>
+</body>
+</html>
