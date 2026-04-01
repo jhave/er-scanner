@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ER — Extinction Registry</title>
+  <meta name="description"
+    content="A whimsical archive of species lost to the accelerating biodiversity crisis — and those still at risk." />
+  <meta name="author" content="Jhave Johnston / CDN UiB / Glia.ca" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <meta name="color-scheme" content="dark" />
+  <meta property="og:title" content="ER — Extinction Registry" />
+  <meta property="og:description"
+    content="A whimsical archive of species lost to the accelerating biodiversity crisis — and those still at risk." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="../public/extinction_rate_graph.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="splash" id="splash">
+    <div class="splash__bg"></div>
+
+    <!-- Language toggle -->
+    <div class="splash__lang" id="lang-toggle">
+      <button id="btn-en" class="active" onclick="setLang('en')">EN</button>
+      <span class="sep">|</span>
+      <button id="btn-nn" class="inactive" onclick="setLang('nn')">NN</button>
+    </div>
+
+    <div class="splash__inner">
+      <div>
+        <div class="splash__logo">ER</div>
+        <p class="splash__subtitle" id="subtitle">EXTINCTION
+          REGISTRY</p>
+      </div>
+
+      <p class="splash__blurb" id="blurb">
+        A whimsical archive of species lost to the accelerating biodiversity crisis — and those still at risk.
+      </p>
+
+      <p class="splash__iucn" id="iucn-line">
+        Archive derived from the <a href="https://en.wikipedia.org/wiki/IUCN_Red_List_of_extinct_species"
+          target="_blank" rel="noopener">IUCN Red List of extinct species</a><br><br>
+        Images, text, code: Gemini 3.1, Opus 4.6, and jhave.
+      </p>
+
+      <a href="archive.html" class="btn-enter" id="btn-enter">Enter Archive</a>
+
+      <div class="splash__credits">
+        <a href="https://glia.ca" target="_blank" rel="noopener">jhave</a>
+        <span class="sep">|</span>
+        <a href="https://cdn.uib.no" target="_blank" rel="noopener">cdn.uib.no</a>
+        <span class="sep">&amp;</span>
+        <a href="https://glia.ca" target="_blank" rel="noopener">glia.ca</a>
+        <span class="date" style="color:rgba(250,250,250,.25)">March, 2026</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const IUCN_URL = 'https://en.wikipedia.org/wiki/IUCN_Red_List_of_extinct_species';
+    const STRINGS = {
+      en: {
+        subtitle: 'EXTINCTION\nREGISTRY',
+        blurb: 'A whimsical archive of species lost to the accelerating biodiversity crisis — and those still at risk.',
+        enter: 'Enter Archive',
+        iucn: `Archive derived from the <a href="${IUCN_URL}" target="_blank" rel="noopener">IUCN Red List of extinct species</a><br><br>Images, text, code: Gemini 3.1, Opus 4.6, and jhave.`,
+      },
+      nn: {
+        subtitle: 'UTRYDDINGS\nREGISTER',
+        blurb: 'Eit lyrisk arkiv over artar som er tapt i den akselererande biodiversitetskrisa — og dei som framleis er truga.',
+        enter: 'Opne Arkivet',
+        iucn: `Arkivet er basert på <a href="${IUCN_URL}" target="_blank" rel="noopener">IUCNs raudliste over utrydda artar</a><br><br>Bilete, tekst, kode: Gemini 3.1, Opus 4.6, og jhave.`,
+      }
+    };
+
+    let lang = localStorage.getItem('er_lang') || 'en';
+
+    function setLang(l) {
+      lang = l;
+      localStorage.setItem('er_lang', lang);
+      render();
+    }
+
+    function render() {
+      const t = STRINGS[lang];
+      document.getElementById('subtitle').textContent = t.subtitle;
+      document.getElementById('blurb').textContent = t.blurb;
+      document.getElementById('btn-enter').textContent = t.enter;
+      document.getElementById('iucn-line').innerHTML = t.iucn;
+      document.getElementById('btn-en').className = lang === 'en' ? 'active' : 'inactive';
+      document.getElementById('btn-nn').className = lang === 'nn' ? 'active' : 'inactive';
+      document.documentElement.lang = lang;
+    }
+
+    render();
+  </script>
+</body>
+
+</html>
