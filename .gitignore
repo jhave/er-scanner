@@ -1,3 +1,15 @@
 .env
-config.local.json
+**/config.local.json
 .DS_Store
+
+# Synopsis working/intermediate files
+bilingual-bigscreen/batch*.json
+bilingual-bigscreen/all_shortened_en*.json
+bilingual-bigscreen/synopses_*.md
+bilingual-bigscreen/species.json
+
+# Backup/deleted image archives
+bilingual-bigscreen/archive_images/deleted_images/
+
+# Test/working folders
+bilingual-bigscreen/TESTS/
